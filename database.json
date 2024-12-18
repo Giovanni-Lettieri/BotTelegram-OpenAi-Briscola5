@@ -1,0 +1,39 @@
+{
+  "gruppi": [
+    {
+      "IDGruppo": 5641681401,
+      "utenti": [
+        {
+          "userId": "12",
+          "alias": "",
+          "points": 0
+        }
+      ]
+    },
+    {
+      "IDGruppo": 661887957,
+      "utenti": [
+        {
+          "userId": "2432",
+          "alias": "",
+          "points": 0
+        }
+      ]
+    },
+    {
+      "IDGruppo": 1023525450,
+      "utenti": [
+        {
+          "userId": "ANDDDDD",
+          "alias": "",
+          "points": 0
+        },
+        {
+          "userId": "Paolo",
+          "alias": "",
+          "points": 0
+        }
+      ]
+    }
+  ]
+}
