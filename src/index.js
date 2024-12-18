@@ -179,7 +179,7 @@ bot.command("partita", async (ctx) => {
         return;
     }
 
-    const userIds1 = args.slice(0, 3); // Squadra 1
+    const userIds1 = args.slice(0, 2); // Squadra 1
     const userIds2 = args.slice(3);    // Squadra 2
 
     const dati = caricaDati();
@@ -192,7 +192,7 @@ bot.command("partita", async (ctx) => {
     const squadra1 = gruppo.utenti.filter((user) => userIds1.includes(user.userId));
     const squadra2 = gruppo.utenti.filter((user) => userIds2.includes(user.userId));
 
-    if (squadra1.length !== 3 || squadra2.length !== 2) {
+    if (squadra1.length !== 2 || squadra2.length !== 3) {
         await ctx.reply("Ogni squadra deve avere il numero corretto di giocatori.");
         return;
     }
