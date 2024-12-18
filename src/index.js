@@ -2,6 +2,7 @@ const OpenAI = require("openai");
 const { Telegraf } = require("telegraf");
 const fs = require("fs");
 const configs = require("./configs");  // Configurazioni, inclusi i token e le chiavi API
+const { message } = require("telegraf/filters")
 
 /* ===================== SETUP ===================== */
 
@@ -381,6 +382,7 @@ bot.command("clear", async (ctx) => {
 
     // Rispondi all'utente
     await ctx.reply("Tutti i punti dei giocatori sono stati azzerati.");
+    await ctx.reply("/classifica");
 });
 
 bot.command("override", async (ctx) => {
@@ -430,9 +432,6 @@ bot.command("override", async (ctx) => {
     await ctx.reply(`Override eseguito! L'utente con userId "${userId}" ha ora ${points} punti.`);
 });
 
-
-
-
 // Comando `/classifica`: Mostra la classifica dei giocatori nel gruppo
 bot.command("classifica", async (ctx) => {
     let dati = caricaDati();
@@ -455,7 +454,11 @@ bot.command("classifica", async (ctx) => {
         });
         await ctx.reply(risposta);
     }
+   
 });
+bot.on(message("text"), async (ctx) => {
+    await ctx.reply(`You said: ${ctx.message.text}`)
+})
 
 // Avvio del bot
 bot.launch().then(() => {
@@ -467,3 +470,37 @@ bot.launch().then(() => {
 // Stop con SIGINT e SIGTERM
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
+
+
+function calcPunti(){
+    let x; 
+    if(team1Players.length < team2Players.length) x = 1;
+      else x = -1;
+      
+      switch(team1Players.length) {
+         case 1:
+         case 4:
+             team1Players.forEach((userId) => {
+                 const user = gruppo.utenti.find((u) => u.userId === userId);
+                 user.points += 4 * x;
+             });
+             team2Players.forEach((userId) => {
+                 const user = gruppo.utenti.find((u) => u.userId === userId);
+                 user.points -= 1 * x;
+             });
+             break;
+         case 2:
+         case 3:
+             var k = 2;
+             team1Players.forEach((userId) => {
+                 const user = gruppo.utenti.find((u) => u.userId === userId);
+                 user.points += k * x;
+                 k--;
+             });
+             team2Players.forEach((userId) => {
+                 const user = gruppo.utenti.find((u) => u.userId === userId);
+                 user.points -= 1 * x;
+             });
+             break;
+     }
+}
