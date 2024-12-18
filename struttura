@@ -1,0 +1,15 @@
+gruppi 
+    {
+        IDGruppo
+        utenti:[{
+         Userid
+         point 
+         alias,
+         Ngiocate,
+        }, {}, {}]
+
+    },
+    {
+
+
+    },
