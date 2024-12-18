@@ -1,7 +1,7 @@
 {
   "gruppi": [
     {
-      "IDGruppo": 661887957,
+      "IDGruppo": 5641681401,
       "partite": [],
       "utenti": [
         {
@@ -26,44 +26,6 @@
         },
         {
           "userId": "5",
-          "alias": "",
-          "points": 0
-        }
-      ]
-    },
-    {
-      "IDGruppo": 5641681401,
-      "partite": [
-        " 1 / 2 3 4 5"
-      ],
-      "utenti": [
-        {
-          "userId": "1",
-          "alias": "",
-          "points": 12
-        },
-        {
-          "userId": "2",
-          "alias": "",
-          "points": -2
-        },
-        {
-          "userId": "3",
-          "alias": "",
-          "points": -2
-        },
-        {
-          "userId": "4",
-          "alias": "",
-          "points": -2
-        },
-        {
-          "userId": "5",
-          "alias": "",
-          "points": -2
-        },
-        {
-          "userId": "6",
           "alias": "",
           "points": 0
         }

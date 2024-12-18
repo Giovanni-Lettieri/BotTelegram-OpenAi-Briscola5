@@ -70,7 +70,6 @@ bot.command("help", async (ctx) => {
     await ctx.reply(`
 Comandi disponibili:
 - /start - Inizia una conversazione con il bot.
-- /ai <domanda> - Fai una domanda al bot e ottieni una risposta da OpenAI.
 - /createUser <userId> - Crea un nuovo utente con l'ID specificato.
 - /addAlias <userId> <alias> - Aggiungi un alias per un utente esistente.
 - /users - Mostra tutti gli utenti registrati in questo gruppo.
@@ -258,96 +257,131 @@ bot.command("partita", async (ctx) => {
 
 bot.command("undo", async (ctx) => {
     const args = ctx.message.text.split(" ").slice(1);
-    const IDGruppo = ctx.chat.id;   
-    const savePartita = ctx.message.text.replace("/undo ", "");
-    
+    const IDGruppo = ctx.chat.id;
+    const savePartita = ctx.message.text.replace("/undo ", "").trim();  // Assicurati che la stringa della partita sia corretta
 
-    if (args.length < 5) {
-        await ctx.reply("Per favore, fornisci almeno 5 playerId: /partita <userId1> <userId2> / <userId3> <userId4> <userId5>");
+    // Verifica che l'utente abbia fornito una stringa di partita
+    if (!savePartita) {
+        await ctx.reply("Errore: devi specificare la partita da annullare. Esempio: /undo <descrizione partita>");
         return;
     }
 
     const dati = caricaDati();
     const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    
     if (!gruppo) {
-        await ctx.reply(`Il gruppo con ID ${IDGruppo} non esiste.`);
+        await ctx.reply(`Errore: il gruppo con ID ${IDGruppo} non esiste.`);
         return;
     }
 
-    dati.gruppi.forEach(element => {
-        
-    });
-        if(gruppo.partite.find(savePartita) => ){
+    // Verifica se la partita esiste
+    const partita = gruppo.partite.find((p) => p === savePartita);  // Confronta direttamente le stringhe
 
-        }
+    if (!partita) {
+        await ctx.reply(`Errore: la partita "${savePartita}" non è mai stata registrata.`);
+        return;
+    }
 
-    const splitText = args.join(" ").split("/");  // Divide i team
+    // Se la partita esiste, procediamo con l'annullamento
+    const splitText = savePartita.split("/");  // Divide i team
     const team1 = splitText[0].trim();
     const team2 = splitText[1]?.trim() || "";
 
     const team1Players = team1.split(" ").filter(Boolean);
     const team2Players = team2.split(" ").filter(Boolean);
 
-
-
+    // Ottieni gli ID degli utenti validi
     const validUserIds = gruppo.utenti.map((user) => user.userId);
     const invalidUserIds = team1Players.concat(team2Players).filter((userId) => !validUserIds.includes(userId));
+
     if (invalidUserIds.length > 0) {
-        await ctx.reply(`Gli userId ${invalidUserIds.join(", ")} non sono validi per questo gruppo.`);
+        await ctx.reply(`Errore: gli userId ${invalidUserIds.join(", ")} non sono validi per questo gruppo.`);
         return;
     }
 
-    // Aggiorna i punti in base ai risultati
-   switch(team1Players.length) {
-    case 1:
-        // chiamata in mano e vince
-        team1Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points -= 4;
-        });
-        team2Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points += 1;
-        });
-        break;
-    case 2:
-        // chiamata esterna e vince
-        var k = 2;
-        team1Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points -= k;
-            k--;
-        });
-        team2Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points += 1;
-        });
-        break;
-    case 3:
-        // chiamo in mano e perdo
-        team2Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points += 4;
-        });
-        team1Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points -= 1;
-        });
-        break; // aggiungi il break qui
-    case 4:
-        // chiamo esterno e perdo
-        var k = 2;
-        team2Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points += k;
-            k--;
-        });
-        team1Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points -= 1;
-        });
-        break;
-}
+    // Aggiorna i punti in base all'undo
+    switch (team1Players.length) {
+        case 1:
+            // chiamata in mano e vince
+            team1Players.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points -= 4;  // Ripristina i punti precedenti
+            });
+            team2Players.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points += 1;  // Ripristina i punti precedenti
+            });
+            break;
+        case 2:
+            // chiamata esterna e vince
+            let k = 2;
+            team1Players.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points -= k;  // Ripristina i punti precedenti
+                k--;
+            });
+            team2Players.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points += 1;  // Ripristina i punti precedenti
+            });
+            break;
+        case 3:
+            // chiamo in mano e perdo
+            team2Players.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points += 4;  // Ripristina i punti precedenti
+            });
+            team1Players.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points -= 1;  // Ripristina i punti precedenti
+            });
+            break;
+        case 4:
+            // chiamo esterno e perdo
+            let k2 = 2;
+            team2Players.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points += k2;  // Ripristina i punti precedenti
+                k2--;
+            });
+            team1Players.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points -= 1;  // Ripristina i punti precedenti
+            });
+            break;
+    }
+
+    // Rimuovi la partita dalla lista delle partite
+    gruppo.partite = gruppo.partite.filter((p) => p !== savePartita);
+
+    // Salva i dati dopo aver eseguito l'undo
+    salvaDati(dati);
+
+    // Rispondi all'utente
+    await ctx.reply(`L'operazione di undo è stata eseguita! La partita "${savePartita}" è stata annullata.`);
+});
+bot.command("clear", async (ctx) => {
+    const IDGruppo = ctx.chat.id;
+
+    const dati = caricaDati();
+    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    
+    if (!gruppo) {
+        await ctx.reply(`Errore: il gruppo con ID ${IDGruppo} non esiste.`);
+        return;
+    }
+
+    // Resetta i punti di tutti i giocatori nel gruppo a 0
+    gruppo.utenti.forEach((user) => {
+        user.points = 0;  // Azzeriamo i punti per ogni giocatore
+    });
+
+    // Salva i dati dopo aver azzerato i punti
+    salvaDati(dati);
+
+    // Rispondi all'utente
+    await ctx.reply("Tutti i punti dei giocatori sono stati azzerati.");
+});
 
 bot.command("override", async (ctx) => {
     // Devo eseguire l'override dei punti del valore passato come parametro
