@@ -80,7 +80,6 @@ Comandi disponibili:
     `);
 });
 
-// Comando `/createUser <userId>`: Crea un nuovo utente all'interno del gruppo
 bot.command("createUser", async (ctx) => {
     const args = ctx.message.text.split(" ").slice(1);
     const userId = args[0];
@@ -92,15 +91,21 @@ bot.command("createUser", async (ctx) => {
     }
 
     const dati = caricaDati();
-    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
-    if (!gruppo) {
-        await ctx.reply(`Il gruppo con ID ${IDGruppo} non esiste.`);
+
+    // Controlla se l'userId è già registrato in qualsiasi gruppo
+    const userExists = dati.gruppi.some((gruppo) => 
+        gruppo.utenti.some((user) => user.userId === userId)
+    );
+
+    if (userExists) {
+        await ctx.reply("Questo userId è già registrato in un altro gruppo. Gli userId devono essere univoci.");
         return;
     }
 
-    // Controlla se l'utente è già nel gruppo
-    if (gruppo.utenti.some((user) => user.userId === userId)) {
-        await ctx.reply("Questo utente è già registrato in questo gruppo.");
+    // Trova il gruppo corrente
+    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    if (!gruppo) {
+        await ctx.reply(`Il gruppo con ID ${IDGruppo} non esiste.`);
         return;
     }
 
@@ -109,6 +114,7 @@ bot.command("createUser", async (ctx) => {
     salvaDati(dati);
     await ctx.reply(`Utente con ID ${userId} creato con successo nel gruppo ${IDGruppo}.`);
 });
+
 
 // Comando `/users`: Mostra tutti gli utenti registrati nel gruppo
 bot.command("users", async (ctx) => {
@@ -220,7 +226,7 @@ bot.command("classifica", async (ctx) => {
 
     if (users.length === 0) {
         await ctx.reply("Non ci sono utenti registrati in questo gruppo.");
-    } else {
+    }else {
         users.sort((a, b) => b.points - a.points);
 
         let risposta = "Classifica:\n";
