@@ -36,6 +36,7 @@ function aggiungiGruppo(IDGruppo) {
     const dati = caricaDati();
     const nuovoGruppo = {
         IDGruppo: IDGruppo,
+        partite:[],
         utenti: []
     };
     dati.gruppi.push(nuovoGruppo);
@@ -57,7 +58,7 @@ bot.start(async (ctx) => {
 
     // Verifica se il gruppo esiste già
     if (!dati.gruppi.find((g) => g.IDGruppo === chatId)) {
-        await aggiungiGruppo(chatId);  // Aggiungi il gruppo con l'ID chat
+        aggiungiGruppo(chatId);  // Aggiungi il gruppo con l'ID chat
         await ctx.reply(`Gruppo creato con successo per il chat ID: ${chatId}`);
     } else {
         await ctx.reply(`Il gruppo con ID ${chatId} esiste già.`);
@@ -80,10 +81,10 @@ Comandi disponibili:
     `);
 });
 
+// Comando `/createUser`: Crea un utente nel gruppo
 bot.command("createUser", async (ctx) => {
     const args = ctx.message.text.split(" ").slice(1);
     const userId = args[0];
-    const IDGruppo = ctx.chat.id;
 
     if (!userId) {
         await ctx.reply("Per favore, fornisci un userId per creare un nuovo utente: /createUser <userId>");
@@ -91,35 +92,26 @@ bot.command("createUser", async (ctx) => {
     }
 
     const dati = caricaDati();
-
-    // Controlla se l'userId è già registrato in qualsiasi gruppo
-    const userExists = dati.gruppi.some((gruppo) => 
-        gruppo.utenti.some((user) => user.userId === userId)
-    );
-
-    if (userExists) {
-        await ctx.reply("Questo userId è già registrato in un altro gruppo. Gli userId devono essere univoci.");
-        return;
-    }
-
-    // Trova il gruppo corrente
-    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    const gruppo = dati.gruppi.find((g) => g.IDGruppo === ctx.chat.id);
     if (!gruppo) {
-        await ctx.reply(`Il gruppo con ID ${IDGruppo} non esiste.`);
+        await ctx.reply("Il gruppo non esiste.");
         return;
     }
 
-    // Aggiungi l'utente al gruppo
+    const userExists = gruppo.utenti.some((user) => user.userId === userId);
+    if (userExists) {
+        await ctx.reply("Questo userId è già registrato in questo gruppo.");
+        return;
+    }
+
     gruppo.utenti.push({ userId, alias: "", points: 0 });
     salvaDati(dati);
-    await ctx.reply(`Utente con ID ${userId} creato con successo nel gruppo ${IDGruppo}.`);
+    await ctx.reply(`Utente con ID ${userId} creato con successo nel gruppo.`);
 });
-
 
 // Comando `/users`: Mostra tutti gli utenti registrati nel gruppo
 bot.command("users", async (ctx) => {
     const IDGruppo = ctx.chat.id;
-
     const dati = caricaDati();
     const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
 
@@ -128,13 +120,11 @@ bot.command("users", async (ctx) => {
         return;
     }
 
-    const utenti = gruppo.utenti;
-
-    if (utenti.length === 0) {
+    if (gruppo.utenti.length === 0) {
         await ctx.reply("Non ci sono utenti registrati in questo gruppo.");
     } else {
         let risposta = "Utenti nel gruppo:\n";
-        utenti.forEach((user) => {
+        gruppo.utenti.forEach((user) => {
             risposta += `ID: ${user.userId}, Alias: ${user.alias}, Punti: ${user.points}\n`;
         });
         await ctx.reply(risposta);
@@ -162,76 +152,272 @@ bot.command("addAlias", async (ctx) => {
 
     const user = gruppo.utenti.find((u) => u.userId === userId);
     if (!user) {
-        await ctx.reply(`Utente con ID ${userId} non trovato nel gruppo ${IDGruppo}.`);
+        await ctx.reply(`Utente con ID ${userId} non trovato nel gruppo.`);
         return;
     }
 
     user.alias = alias;
     salvaDati(dati);
-    await ctx.reply(`Alias per l'utente ${userId} nel gruppo ${IDGruppo} aggiornato a "${alias}".`);
+    await ctx.reply(`Alias per l'utente ${userId} aggiornato a "${alias}".`);
 });
 
-// Comando `/partita <userId1> <userId2> / <userId3> <userId4> <userId5>`: Registra una partita
+// Comando `/partita`: Registra una partita e aggiorna i punti
 bot.command("partita", async (ctx) => {
     const args = ctx.message.text.split(" ").slice(1);
+    const IDGruppo = ctx.chat.id;
+    const savePartita = ctx.message.text.replace("/partita " , "");
+
     if (args.length < 5) {
         await ctx.reply("Per favore, fornisci almeno 5 playerId: /partita <userId1> <userId2> / <userId3> <userId4> <userId5>");
         return;
     }
 
-    const userIds1 = args.slice(0, 2); // Squadra 1
-    const userIds2 = args.slice(3);    // Squadra 2
+    let dati = caricaDati();
 
-    const dati = caricaDati();
-    const gruppo = dati.gruppi.find((g) => g.IDGruppo === ctx.chat.id);
+    let gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+
+   gruppo.partite.push(savePartita);
+
     if (!gruppo) {
-        await ctx.reply(`Il gruppo con ID ${ctx.chat.id} non esiste.`);
+        await ctx.reply(`Il gruppo con ID ${IDGruppo} non esiste.`);
         return;
     }
 
-    const squadra1 = gruppo.utenti.filter((user) => userIds1.includes(user.userId));
-    const squadra2 = gruppo.utenti.filter((user) => userIds2.includes(user.userId));
+    const splitText = args.join(" ").split("/");  // Divide i team
+    const team1 = splitText[0].trim();
+    const team2 = splitText[1]?.trim() || "";
 
-    if (squadra1.length !== 2 || squadra2.length !== 3) {
-        await ctx.reply("Ogni squadra deve avere il numero corretto di giocatori.");
+    const team1Players = team1.split(" ").filter(Boolean);
+    const team2Players = team2.split(" ").filter(Boolean);
+
+
+
+    const validUserIds = gruppo.utenti.map((user) => user.userId);
+    const invalidUserIds = team1Players.concat(team2Players).filter((userId) => !validUserIds.includes(userId));
+    if (invalidUserIds.length > 0) {
+        await ctx.reply(`Gli userId ${invalidUserIds.join(", ")} non sono validi per questo gruppo.`);
         return;
     }
 
-    const squadra1Points = Math.floor(Math.random() * 10);
-    const squadra2Points = Math.floor(Math.random() * 10);
+    // Aggiorna i punti in base ai risultati
+   switch(team1Players.length) {
+    case 1:
+        // chiamata in mano e vince
+        team1Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points += 4;
+        });
+        team2Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points -= 1;
+        });
+        break;
+    case 2:
+        // chiamata esterna e vince
+        var k = 2;
+        team1Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points += k;
+            k--;
+        });
+        team2Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points -= 1;
+        });
+        break;
+    case 3:
+        // chiamo in mano e perdo
+        team2Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points -= 4;
+        });
+        team1Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points += 1;
+        });
+        break; // aggiungi il break qui
+    case 4:
+        // chiamo esterno e perdo
+        var k = 2;
+        team2Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points -= k;
+            k--;
+        });
+        team1Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points += 1;
+        });
+        break;
+}
 
-    squadra1.forEach((user) => (user.points += squadra1Points));
-    squadra2.forEach((user) => (user.points += squadra2Points));
 
     salvaDati(dati);
-
-    await ctx.reply(`
-Partita completata!
-Squadra 1 (Punti: ${squadra1Points}): ${squadra1.map((u) => u.alias).join(", ")}
-Squadra 2 (Punti: ${squadra2Points}): ${squadra2.map((u) => u.alias).join(", ")}
-`);
+    await ctx.reply(`Punteggi aggiornati!`);
 });
+
+bot.command("undo", async (ctx) => {
+    const args = ctx.message.text.split(" ").slice(1);
+    const IDGruppo = ctx.chat.id;   
+    const savePartita = ctx.message.text.replace("/undo ", "");
+    
+
+    if (args.length < 5) {
+        await ctx.reply("Per favore, fornisci almeno 5 playerId: /partita <userId1> <userId2> / <userId3> <userId4> <userId5>");
+        return;
+    }
+
+    const dati = caricaDati();
+    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    if (!gruppo) {
+        await ctx.reply(`Il gruppo con ID ${IDGruppo} non esiste.`);
+        return;
+    }
+
+    dati.gruppi.forEach(element => {
+        
+    });
+        if(gruppo.partite.find(savePartita) => ){
+
+        }
+
+    const splitText = args.join(" ").split("/");  // Divide i team
+    const team1 = splitText[0].trim();
+    const team2 = splitText[1]?.trim() || "";
+
+    const team1Players = team1.split(" ").filter(Boolean);
+    const team2Players = team2.split(" ").filter(Boolean);
+
+
+
+    const validUserIds = gruppo.utenti.map((user) => user.userId);
+    const invalidUserIds = team1Players.concat(team2Players).filter((userId) => !validUserIds.includes(userId));
+    if (invalidUserIds.length > 0) {
+        await ctx.reply(`Gli userId ${invalidUserIds.join(", ")} non sono validi per questo gruppo.`);
+        return;
+    }
+
+    // Aggiorna i punti in base ai risultati
+   switch(team1Players.length) {
+    case 1:
+        // chiamata in mano e vince
+        team1Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points -= 4;
+        });
+        team2Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points += 1;
+        });
+        break;
+    case 2:
+        // chiamata esterna e vince
+        var k = 2;
+        team1Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points -= k;
+            k--;
+        });
+        team2Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points += 1;
+        });
+        break;
+    case 3:
+        // chiamo in mano e perdo
+        team2Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points += 4;
+        });
+        team1Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points -= 1;
+        });
+        break; // aggiungi il break qui
+    case 4:
+        // chiamo esterno e perdo
+        var k = 2;
+        team2Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points += k;
+            k--;
+        });
+        team1Players.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points -= 1;
+        });
+        break;
+}
+
+bot.command("override", async (ctx) => {
+    // Devo eseguire l'override dei punti del valore passato come parametro
+    // - /override <userId> <points>
+    const args = ctx.message.text.split(" ").slice(1);
+
+    // Controllo preliminare per assicurarsi che ci siano abbastanza argomenti
+    if (args.length < 2) {
+        return await ctx.reply("Errore: devi specificare un userId e un valore per i punti. Esempio: /override <userId> <points>");
+    }
+
+    const userId = args[0].toString();  // Assicuriamoci che userId sia una stringa
+    const points = parseInt(args[1], 10);
+
+    // Controlla che `points` sia un numero valido
+    if (isNaN(points)) {
+        return await ctx.reply("Errore: il valore dei punti deve essere un numero valido.");
+    }
+
+    // Carica i dati del gruppo (se necessario)
+    const dati = caricaDati();  // Assicurati che questa funzione carichi i dati correttamente
+    const IDGruppo = ctx.chat.id;
+    
+    // Trova il gruppo dal dato
+    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+
+    // Se il gruppo non esiste, invia un messaggio di errore
+    if (!gruppo) {
+        return await ctx.reply(`Errore: il gruppo con ID ${IDGruppo} non esiste.`);
+    }
+
+    // Trova l'utente all'interno del gruppo
+    const user = gruppo.utenti.find((u) => u.userId === userId);
+
+    if (!user) {
+        return await ctx.reply(`Errore: utente con userId "${userId}" non trovato.`);
+    }
+
+    // Esegui l'override dei punti
+    user.points = points;
+
+    // Salva i dati aggiornati
+    salvaDati(dati);
+
+    // Rispondi al comando
+    await ctx.reply(`Override eseguito! L'utente con userId "${userId}" ha ora ${points} punti.`);
+});
+
+
+
 
 // Comando `/classifica`: Mostra la classifica dei giocatori nel gruppo
 bot.command("classifica", async (ctx) => {
-    const dati = caricaDati();
-    const gruppo = dati.gruppi.find((g) => g.IDGruppo === ctx.chat.id);
+    let dati = caricaDati();
+    let gruppo = dati.gruppi.find((g) => g.IDGruppo === ctx.chat.id);
 
     if (!gruppo) {
         await ctx.reply("Il gruppo non esiste.");
         return;
     }
 
-    const users = gruppo.utenti;
-
-    if (users.length === 0) {
+    const utenti = gruppo.utenti;
+    if (utenti.length === 0) {
         await ctx.reply("Non ci sono utenti registrati in questo gruppo.");
-    }else {
-        users.sort((a, b) => b.points - a.points);
+    } else {
+        utenti.sort((a, b) => b.points - a.points);
 
         let risposta = "Classifica:\n";
-        users.forEach((user, index) => {
-            risposta += `${index + 1}. ${user.alias} - ${user.points} punti\n`;
+        utenti.forEach((user, index) => {
+            risposta += `${index + 1} Posizione, Nome:${user.alias || user.userId} - ${user.points} punti\n`;
         });
         await ctx.reply(risposta);
     }
@@ -239,7 +425,7 @@ bot.command("classifica", async (ctx) => {
 
 // Avvio del bot
 bot.launch().then(() => {
-    console.log("Bot is up and running");
+    console.log("Bot è attivo");
 }).catch((err) => {
     console.error("Error starting bot", err);
 });
