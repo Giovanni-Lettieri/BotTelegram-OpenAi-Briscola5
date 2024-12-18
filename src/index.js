@@ -35,6 +35,6 @@ bot.launch(() => {
     console.error('Error starting bot', err)
 })
 
-// Enable graceful stop
+// Enable graceful stop for develop
 process.once("SIGINT", () => bot.stop("SIGINT"))
 process.once("SIGTERM", () => bot.stop("SIGTERM"))
