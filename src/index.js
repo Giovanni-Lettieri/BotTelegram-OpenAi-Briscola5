@@ -2,7 +2,7 @@ const OpenAI = require("openai");
 const { Telegraf } = require("telegraf");
 const configs = require("./configs");  // Configurazioni, inclusi i token e le chiavi API
 const { message } = require("telegraf/filters")
-const { salvaDati, caricaDati,aggiungiGruppo,writeHelp,createUser,addAlias,partita,undo } = require("./utils");
+const { salvaDati, caricaDati,aggiungiGruppo,writeHelp,createUser,addAlias,partita,undo,clear, setOverride} = require("./utils");
 
 
 /* ===================== SETUP ===================== */
@@ -182,24 +182,7 @@ bot.command("undo", async (ctx) => {
 
 // Eseguiamo un reset dei punteggi di tutti gli utenti
 // Funzione clear modificata
-async function clear(dati, IDGruppo) {
-    // Trova il gruppo associato all'IDGruppo
-    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
-    if (!gruppo) {
-        throw new Error(`Errore: il gruppo con ID ${IDGruppo} non esiste.`);
-    }
 
-    // Resetta i punti di tutti i giocatori nel gruppo a 0
-    gruppo.utenti.forEach((user) => {
-        user.points = 0;  // Azzeriamo i punti per ogni giocatore
-    });
-
-    // Salva i dati dopo aver azzerato i punti
-    salvaDati(dati);
-
-    // Restituisci un messaggio di conferma
-    return "Tutti i punti dei giocatori sono stati azzerati.";
-}
 
 // Comando `/clear`: Azzerare i punti di tutti i giocatori del gruppo
 bot.command("clear", async (ctx) => {
@@ -219,9 +202,11 @@ bot.command("clear", async (ctx) => {
     }
 });
 
-async function setOverride (ctx){
-    // Devo eseguire l'override dei punti del valore passato come parametro
-    // - /override <userId> <points>
+// Funzione setOverride modificata
+
+
+// Comando `/override`: Imposta i punti di un utente
+bot.command("override", async (ctx) => {
     const args = ctx.message.text.split(" ").slice(1);
 
     // Controllo preliminare per assicurarsi che ci siano abbastanza argomenti
@@ -229,46 +214,29 @@ async function setOverride (ctx){
         return await ctx.reply("Errore: devi specificare un userId e un valore per i punti. Esempio: /override <userId> <points>");
     }
 
-    const userId = args[0].toString();  // Assicuriamoci che userId sia una stringa
+    const utenteId = args[0].toString();  // Assicuriamoci che userId sia una stringa
     const points = parseInt(args[1], 10);
-
+    
     // Controlla che `points` sia un numero valido
     if (isNaN(points)) {
         return await ctx.reply("Errore: il valore dei punti deve essere un numero valido.");
     }
 
-    // Carica i dati del gruppo (se necessario)
-    const dati = caricaDati();  // Assicurati che questa funzione carichi i dati correttamente
+    // Carica i dati
+    let dati = caricaDati();  // Carica i dati del gruppo
     const IDGruppo = ctx.chat.id;
-    
-    // Trova il gruppo dal dato
-    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
 
-    // Se il gruppo non esiste, invia un messaggio di errore
-    if (!gruppo) {
-        return await ctx.reply(`Errore: il gruppo con ID ${IDGruppo} non esiste.`);
+    try {
+        // Esegui la funzione setOverride passando i parametri
+        const result = await setOverride(dati, IDGruppo, utenteId, points);
+
+        // Rispondi con il risultato
+        await ctx.reply(result);
+    } catch (error) {
+        await ctx.reply(error.message);  // Rispondi con l'errore, se presente
     }
-
-    // Trova l'utente all'interno del gruppo
-    const user = gruppo.utenti.find((u) => u.userId === userId);
-
-    if (!user) {
-        return await ctx.reply(`Errore: utente con userId "${userId}" non trovato.`);
-    }
-
-    // Esegui l'override dei punti
-    user.points = points;
-
-    // Salva i dati aggiornati
-    salvaDati(dati);
-
-    // Rispondi al comando
-    await ctx.reply(`Override eseguito! L'utente con userId "${userId}" ha ora ${points} punti.`);
-};
-
-bot.command("override", async (ctx) => {
-    setOverride(ctx);  
 });
+
 async function clasifica(ctx){
     let dati = caricaDati();
     let gruppo = dati.gruppi.find((g) => g.IDGruppo === ctx.chat.id);
@@ -286,7 +254,7 @@ async function clasifica(ctx){
 
         let risposta = "Classifica:\n";
         utenti.forEach((user, index) => {
-            risposta += `${index + 1} Posizione, Nome:${user.alias || user.userId} - Punteggio -> ${user.points} punti\n`;
+            risposta += `${index + 1} Posizione, Nome: ${user.alias || user.userId} - Punteggio -> ${user.points} punti\n`;
         });
         await ctx.reply(risposta);
     }

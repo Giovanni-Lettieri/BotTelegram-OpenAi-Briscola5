@@ -351,6 +351,46 @@ async function partita(dati, IDGruppo, winTeams, FailTeams2) {
 
     return "Punteggi aggiornati!";
 }
+async function clear(dati, IDGruppo) {
+    // Trova il gruppo associato all'IDGruppo
+    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    if (!gruppo) {
+        throw new Error(`Errore: il gruppo con ID ${IDGruppo} non esiste.`);
+    }
+
+    // Resetta i punti di tutti i giocatori nel gruppo a 0
+    gruppo.utenti.forEach((user) => {
+        user.points = 0;  // Azzeriamo i punti per ogni giocatore
+    });
+
+    // Salva i dati dopo aver azzerato i punti
+    salvaDati(dati);
+
+    // Restituisci un messaggio di conferma
+    return "Tutti i punti dei giocatori sono stati azzerati.";
+}
+async function setOverride(dati, IDGruppo, utenteId, points) {
+    // Trova il gruppo associato all'IDGruppo
+    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    if (!gruppo) {
+        throw new Error(`Errore: il gruppo con ID ${IDGruppo} non esiste.`);
+    }
+
+    // Trova l'utente all'interno del gruppo
+    const user = gruppo.utenti.find((u) => u.userId === utenteId);
+    if (!user) {
+        throw new Error(`Errore: utente con userId "${utenteId}" non trovato.`);
+    }
+
+    // Esegui l'override dei punti
+    user.points = points;
+
+    // Salva i dati aggiornati
+    salvaDati(dati);
+
+    // Restituisci il messaggio di conferma
+    return `Override eseguito! L'utente con userId "${utenteId}" ha ora ${points} punti.`;
+}
 // Selezioniamo le funzioni che vogliamo esportare da questo file
 module.exports = {
     completionWithFunctions,
@@ -364,5 +404,7 @@ module.exports = {
     addAlias,
     partita,
     undo,
+    clear,
+    setOverride,
     
 }

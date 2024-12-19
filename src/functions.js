@@ -80,18 +80,24 @@ const functions = [{
     //undo
     definition: {
         name: "undo",
-        description: "",
+        description: "funzione che dati 2 array di utenti che hanno fatto una partita cerca in un database se tale parttita e effetivamente avvenuta e se si la elimina riassegnando i punti come se non fosse mai avvenuta,i 2 array sono strutturati nel seguente modo: arrW contiente gli utenti della squadra vincente mentre arrF i perdenti, l'array piu piccolo ha in prima posizione il giocatore che ha effetuato la chiamata",
         parameters: {
             type: "object",
             properties: {
-                x: {
-                    type: "string"
+                arrW: {
+                    type: "array", 
+                    items : {type:"string"}
                 },
+                arrF: {
+                    type: "array", 
+                    items : {type:"string"}
+                }
             },
         }
     },
-    handler: (options) => {
-        
+    handler: async (options) => {
+        const{ arrW , arrF } = options;
+        await f.undo(f.caricaDati  , ctx.chat.it , arrW , arrF);     
     },
     //clasifica
     //dati idgruppo 
@@ -100,11 +106,11 @@ const functions = [{
         description: "la funzione stampa una classifica in base ai punti di ogni giocatore",
     },
     handler: (options) => {
-          f.classifica();
+        f.classifica();
     },
     //overide
     definition: {
-        name: "override",
+        name: "setOverride",
         description: "funzione che sovrascrive il punteggio di un utente con un nuovo punteggio",
         parameters: {
             type: "object",
@@ -120,7 +126,7 @@ const functions = [{
     },
     handler: async (options) => {
         const{ userid , punti } = options;
-        f.salvaDati(await f.override(f.caricaDati() , ctx.chat.id , userid , punti));
+        f.salvaDati(await f.setOverride(f.caricaDati() , ctx.chat.id , userid , punti));
     },
     //clear FINIRE
     definition: {
@@ -140,7 +146,7 @@ const functions = [{
     },
     handler: async (options) => {
         const{ userid , punti } = options;
-        f.salvaDati(await f.);
+        f.salvaDati(await f.clear(f.caricaDati() , ctx.chat.id));
     }
 }]
 
