@@ -2,7 +2,10 @@ const OpenAI = require("openai");
 const { Telegraf } = require("telegraf");
 const configs = require("./configs");  // Configurazioni, inclusi i token e le chiavi API
 const { message } = require("telegraf/filters")
-const { salvaDati, caricaDati,aggiungiGruppo,writeHelp,createUser,addAlias,partita,undo,clear, setOverride} = require("./utils");
+const utils = require("./utils")
+const { functions } = require("./functions")
+
+const { salvaDati, caricaDati,aggiungiGruppo,writeHelp,createUser,addAlias,partita,undo,clear, setOverride, classifica} = require("./utils");
 
 
 /* ===================== SETUP ===================== */
@@ -237,36 +240,50 @@ bot.command("override", async (ctx) => {
     }
 });
 
-async function clasifica(ctx){
-    let dati = caricaDati();
-    let gruppo = dati.gruppi.find((g) => g.IDGruppo === ctx.chat.id);
+// Funzione clasifica modificata
 
-    if (!gruppo) {
-        await ctx.reply("Il gruppo non esiste.");
-        return;
-    }
 
-    const utenti = gruppo.utenti;
-    if (utenti.length === 0) {
-        await ctx.reply("Non ci sono utenti registrati in questo gruppo.");
-    } else {
-        utenti.sort((a, b) => b.points - a.points);
-
-        let risposta = "Classifica:\n";
-        utenti.forEach((user, index) => {
-            risposta += `${index + 1} Posizione, Nome: ${user.alias || user.userId} - Punteggio -> ${user.points} punti\n`;
-        });
-        await ctx.reply(risposta);
-    }
-}
 // Comando `/classifica`: Mostra la classifica dei giocatori nel gruppo
 bot.command("classifica", async (ctx) => {
-    clasifica(ctx);
-});
-bot.on(message("text"), async (ctx) => {
-    await ctx.reply(`You said: ${ctx.message.text}`)
-})
+    const IDGruppo = ctx.chat.id;
+    let dati = caricaDati();  // Carica i dati
 
+    try {
+        // Esegui la funzione clasifica passando i parametri
+        const result = await classifica(dati, IDGruppo);
+
+        // Rispondi con il risultato
+        await ctx.reply(result);
+    } catch (error) {
+        await ctx.reply(error.message);  // Rispondi con l'errore, se presente
+    }
+});
+
+bot.on(message("text"), async (ctx) => {
+    const message = ctx.message.text
+    const chatId = ctx.chat.id
+
+
+    const response = await utils.completionWithFunctions({
+        openai,
+        prompt: message,
+        functions,
+        messages: [{
+            role: "system",
+            content: `
+                =========================================
+                La chatID è ${ chatId }
+                ========================================
+
+                ========================================
+        `
+        
+        }]
+    })
+
+    await ctx.reply(response)
+})
+ 
 // Avvio del bot
 bot.launch().then(() => {
     console.log("Bot è attivo");

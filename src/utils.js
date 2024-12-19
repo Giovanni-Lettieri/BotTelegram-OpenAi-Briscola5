@@ -66,10 +66,14 @@ const completionWithFunctions = async (options) => {
         functions
     } = options
 
-    const tools = functions.map(({ definition }) => ({
-        type: "function",
-        function: definition
-    }))
+    let tools = []
+
+    if (functions.length !== 0) {
+        tools = functions.map(({ definition }) => ({
+            type: "function",
+            function: definition
+        }))
+    }
 
     // Add the prompt to the list of messages
     messages.push({
@@ -77,10 +81,14 @@ const completionWithFunctions = async (options) => {
         content: prompt
     })
 
+    console.log("Messages:", messages)
+
     const firstCompletion = await openai.chat.completions.create({
         model,
         messages,
-        tools
+        tools: tools.length === 0
+            ? undefined
+            : tools
     })
 
     const firstMessage = firstCompletion.choices[0].message
@@ -88,20 +96,20 @@ const completionWithFunctions = async (options) => {
 
     // Add the message to the list of messages
     messages.push(firstMessage)
-
+    console.log(tool_calls)
     if (tool_calls) {
         // The assistant has requested one or more tool calls
         for (const toolCall of tool_calls) {
             const functionName = toolCall.function.name
             const functionArguments = JSON.parse(toolCall.function.arguments)
-
+            
             const targetFunction = functions.find(({ definition }) => definition.name === functionName)
             if (!targetFunction) {
                 throw new Error(`Function ${functionName} not found`)
             }
 
             const functionHandler = targetFunction.handler
-            const result = functionHandler(functionArguments)
+            const result = await functionHandler(functionArguments)
 
             // Add the result to the list of messages
             messages.push({
@@ -111,6 +119,9 @@ const completionWithFunctions = async (options) => {
             })
         }
     }
+    
+
+    console.log(messages)
 
     const secondCompletion = await openai.chat.completions.create({
         model,
@@ -125,7 +136,7 @@ const completionWithFunctions = async (options) => {
 
 // Comando `/createUser`: Crea un utente nel gruppo
 
-async function setUsers(ctx) {
+/*async function setUsers(ctx) {
     const IDGruppo = ctx.chat.id;
     const dati = caricaDati();
     const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
@@ -145,11 +156,11 @@ async function setUsers(ctx) {
         await ctx.reply(risposta);
     }
 }
-
+*/
 
 // Funzione per restituire l'output  del comando /help
-function writeHelp(){
-    ctx.reply(`
+function writeHelp() {
+    return `
         Comandi disponibili:
         - /start - Inizia una conversazione con il bot.
         - /createUser <userId> - Crea un nuovo utente con l'ID specificato.
@@ -159,8 +170,9 @@ function writeHelp(){
         - /classifica - Mostra la classifica dei giocatori nel gruppo.
         - /override <userId> <points> - Sovrascrive i punti di un utente.
         - /undo <userId1> <userId2> / <userId3> <userId4> <userId5> - Annulla una partita.
-    `);
+    `;
 }
+
 
 
 // Funzione per il comando "/createUser"
@@ -351,9 +363,9 @@ async function partita(dati, IDGruppo, winTeams, FailTeams2) {
 
     return "Punteggi aggiornati!";
 }
-async function clear(dati, IDGruppo) {
+async function clear(dati, IDGruppo2) {
     // Trova il gruppo associato all'IDGruppo
-    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo2);
     if (!gruppo) {
         throw new Error(`Errore: il gruppo con ID ${IDGruppo} non esiste.`);
     }
@@ -391,10 +403,32 @@ async function setOverride(dati, IDGruppo, utenteId, points) {
     // Restituisci il messaggio di conferma
     return `Override eseguito! L'utente con userId "${utenteId}" ha ora ${points} punti.`;
 }
+async function classifica(dati, IDGruppo) {
+    // Trova il gruppo associato all'IDGruppo
+    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    if (!gruppo) {
+        throw new Error("Il gruppo non esiste.");
+    }
+
+    const utenti = gruppo.utenti;
+    if (utenti.length === 0) {
+        return "Non ci sono utenti registrati in questo gruppo.";
+    } else {
+        // Ordina gli utenti in base ai punti in modo decrescente
+        utenti.sort((a, b) => b.points - a.points);
+
+        let risposta = "Classifica:\n";
+        utenti.forEach((user, index) => {
+            risposta += `${index + 1} Posizione, Nome: ${user.alias || user.userId} - Punteggio -> ${user.points} punti\n`;
+        });
+        return risposta;
+    }
+}
+
+ 
 // Selezioniamo le funzioni che vogliamo esportare da questo file
 module.exports = {
     completionWithFunctions,
-    setUsers,
     aggiungiGruppo,
     writeHelp,
     caricaDati,
@@ -406,5 +440,5 @@ module.exports = {
     undo,
     clear,
     setOverride,
-    
+    classifica
 }
