@@ -1,0 +1,19 @@
+{
+  "gruppi": [
+    {
+      "IDGruppo": 5641681401,
+      "utenti": []
+    },
+    {
+      "IDGruppo": 5641681401,
+      "utenti": []
+    }
+  ],
+  "users": [
+    {
+      "userId": "1",
+      "alias": "",
+      "points": 0
+    }
+  ]
+}

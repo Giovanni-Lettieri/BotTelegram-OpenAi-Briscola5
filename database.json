@@ -2,8 +2,20 @@
   "gruppi": [
     {
       "IDGruppo": 5641681401,
-      "partite": [],
+      "partite": [
+        "1 2 / 3 4 5"
+      ],
       "utenti": [
+        {
+          "userId": "1",
+          "alias": "ciao",
+          "points": 0
+        },
+        {
+          "userId": "12",
+          "alias": "merda",
+          "points": 0
+        },
         {
           "userId": "1",
           "alias": "",
@@ -28,6 +40,59 @@
           "userId": "5",
           "alias": "",
           "points": 0
+        }
+      ]
+    },
+    {
+      "IDGruppo": 1023525450,
+      "partite": [
+        "1 / 2 3 4 9"
+      ],
+      "utenti": [
+        {
+          "userId": "1",
+          "alias": "",
+          "points": 4
+        },
+        {
+          "userId": "2",
+          "alias": "",
+          "points": -1
+        },
+        {
+          "userId": "3",
+          "alias": "",
+          "points": -1
+        },
+        {
+          "userId": "4",
+          "alias": "",
+          "points": -1
+        },
+        {
+          "userId": "5",
+          "alias": "",
+          "points": 0
+        },
+        {
+          "userId": "6",
+          "alias": "",
+          "points": 0
+        },
+        {
+          "userId": "7",
+          "alias": "",
+          "points": 0
+        },
+        {
+          "userId": "8",
+          "alias": "",
+          "points": 0
+        },
+        {
+          "userId": "9",
+          "alias": "",
+          "points": -1
         }
       ]
     }

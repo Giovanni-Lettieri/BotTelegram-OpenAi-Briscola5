@@ -1,49 +1,17 @@
 const OpenAI = require("openai");
 const { Telegraf } = require("telegraf");
-const fs = require("fs");
 const configs = require("./configs");  // Configurazioni, inclusi i token e le chiavi API
 const { message } = require("telegraf/filters")
+const { salvaDati, caricaDati,aggiungiGruppo,writeHelp,createUser,addAlias,partita,undo } = require("./utils");
+
 
 /* ===================== SETUP ===================== */
 
 // Carica i dati dal file JSON all'avvio
-function caricaDati(filename = "database.json") {
-    try {
-        const data = fs.readFileSync(filename, "utf8");
-        const parsedData = JSON.parse(data);
 
-        // Assicurati che esistano le chiavi 'gruppi' e 'users'
-        if (!parsedData.gruppi) {
-            parsedData.gruppi = [];
-        }
-        return parsedData;
-    } catch (err) {
-        console.error("Errore nel caricare il file:", err);
-        return { gruppi: [] };  // Restituisci un oggetto vuoto in caso di errore
-    }
-}
-
-// Salva i dati nel file JSON
-function salvaDati(dati, filename = "database.json") {
-    try {
-        fs.writeFileSync(filename, JSON.stringify(dati, null, 2), "utf8");
-    } catch (err) {
-        console.error("Errore nel salvare il file:", err);
-    }
-}
 
 // Funzione per aggiungere un gruppo
-function aggiungiGruppo(IDGruppo) {
-    const dati = caricaDati();
-    const nuovoGruppo = {
-        IDGruppo: IDGruppo,
-        partite:[],
-        utenti: []
-    };
-    dati.gruppi.push(nuovoGruppo);
-    salvaDati(dati);
-    console.log(`Gruppo con ID ${IDGruppo} aggiunto.`);
-}
+
 
 /* ===================== COMANDI BOT ===================== */
 
@@ -68,43 +36,26 @@ bot.start(async (ctx) => {
 
 // Comando `/help`: Mostra i comandi disponibili
 bot.command("help", async (ctx) => {
-    await ctx.reply(`
-Comandi disponibili:
-- /start - Inizia una conversazione con il bot.
-- /createUser <userId> - Crea un nuovo utente con l'ID specificato.
-- /addAlias <userId> <alias> - Aggiungi un alias per un utente esistente.
-- /users - Mostra tutti gli utenti registrati in questo gruppo.
-- /partita <userId1> <userId2> / <userId3> <userId4> <userId5> - Registra una partita.
-- /classifica - Mostra la classifica dei giocatori nel gruppo.
-- /override <userId> <points> - Sovrascrive i punti di un utente.
-- /undo <userId1> <userId2> / <userId3> <userId4> <userId5> - Annulla una partita.
-    `);
+    const helpMessage = await writeHelp();
+    await ctx.reply(helpMessage);
 });
+
 
 // Comando `/createUser`: Crea un utente nel gruppo
 bot.command("createUser", async (ctx) => {
     const args = ctx.message.text.split(" ").slice(1);
     const userId = args[0];
-
+    // Controlliamo che sia presente il nostro utente (userId)
     if (!userId) {
         await ctx.reply("Per favore, fornisci un userId per creare un nuovo utente: /createUser <userId>");
         return;
     }
 
-    const dati = caricaDati();
-    const gruppo = dati.gruppi.find((g) => g.IDGruppo === ctx.chat.id);
-    if (!gruppo) {
-        await ctx.reply("Il gruppo non esiste.");
-        return;
-    }
-
-    const userExists = gruppo.utenti.some((user) => user.userId === userId);
-    if (userExists) {
-        await ctx.reply("Questo userId è già registrato in questo gruppo.");
-        return;
-    }
-
-    gruppo.utenti.push({ userId, alias: "", points: 0 });
+    let dati = caricaDati();
+ 
+    console.log("userid index", userId)
+    // Salviamo i dati nel file JSONel userId ed il contesto
+    dati = await createUser(userId, dati,ctx.chat.id);
     salvaDati(dati);
     await ctx.reply(`Utente con ID ${userId} creato con successo nel gruppo.`);
 });
@@ -114,12 +65,13 @@ bot.command("users", async (ctx) => {
     const IDGruppo = ctx.chat.id;
     const dati = caricaDati();
     const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
-
+    // Controllo che esista già l'IDGruppo
     if (!gruppo) {
         await ctx.reply(`Il gruppo con ID ${IDGruppo} non esiste.`);
         return;
     }
 
+    // Controlliamo il quantitativo di utenti
     if (gruppo.utenti.length === 0) {
         await ctx.reply("Non ci sono utenti registrati in questo gruppo.");
     } else {
@@ -138,51 +90,82 @@ bot.command("addAlias", async (ctx) => {
     const alias = args.slice(1).join(" ");
     const IDGruppo = ctx.chat.id;
 
+    // Chiediamo l'inserimento e l'alias
     if (!userId || !alias) {
         await ctx.reply("Per favore, fornisci un userId e un alias: /addAlias <userId> <alias>");
         return;
     }
 
-    const dati = caricaDati();
-    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    let dati = caricaDati();
+    let gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
     if (!gruppo) {
         await ctx.reply(`Il gruppo con ID ${IDGruppo} non esiste.`);
         return;
     }
 
-    const user = gruppo.utenti.find((u) => u.userId === userId);
+    let user = gruppo.utenti.find((u) => u.userId === userId);
+    // Controlliamo la presenza dell'utente
     if (!user) {
         await ctx.reply(`Utente con ID ${userId} non trovato nel gruppo.`);
         return;
     }
-
-    user.alias = alias;
+    // Attribuiamo all'utente l'alias e salviamo i dati nel file JSON
+    user = addAlias(user,alias);
     salvaDati(dati);
     await ctx.reply(`Alias per l'utente ${userId} aggiornato a "${alias}".`);
+
 });
+
+// Comando `/partita`: Registra una partita e aggiorna i punti
+
+
+// Funzione partita modificata
+
 
 // Comando `/partita`: Registra una partita e aggiorna i punti
 bot.command("partita", async (ctx) => {
     const args = ctx.message.text.split(" ").slice(1);
     const IDGruppo = ctx.chat.id;
-    const savePartita = ctx.message.text.replace("/partita " , "");
 
     if (args.length < 5) {
         await ctx.reply("Per favore, fornisci almeno 5 playerId: /partita <userId1> <userId2> / <userId3> <userId4> <userId5>");
         return;
     }
 
+    // Carica i dati
     let dati = caricaDati();
 
-    let gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    // Dividi i giocatori nei due team
+    const splitText = args.join(" ").split("/");  // Divide i team
+    const team1 = splitText[0].trim();
+    const team2 = splitText[1]?.trim() || "";
+    // Prepariamo gli array con il team dei vincitori (team1) e dei perdenti (team2)
+    const team1Players = team1.split(" ").filter(Boolean);
+    const team2Players = team2.split(" ").filter(Boolean);
 
-   gruppo.partite.push(savePartita);
+    // Esegui la funzione partita passando i parametri
+    const result = await partita(dati, IDGruppo, team1Players, team2Players);
 
-    if (!gruppo) {
-        await ctx.reply(`Il gruppo con ID ${IDGruppo} non esiste.`);
+    // Rispondi con il risultato
+    await ctx.reply(result);
+});
+
+// Funzione undo modificata, ci permette di tornare indietro con le partite
+
+// Comando `/undo`: Annulla una partita e aggiorna i punteggi
+bot.command("undo", async (ctx) => {
+    const args = ctx.message.text.split(" ").slice(1);
+    const IDGruppo = ctx.chat.id;
+
+    if (args.length < 5) {
+        await ctx.reply("Per favore, fornisci almeno 5 playerId: /undo <userId1> <userId2> / <userId3> <userId4> <userId5>");
         return;
     }
 
+    // Carica i dati
+    let dati = caricaDati();
+
+    // Dividi i giocatori nei due team
     const splitText = args.join(" ").split("/");  // Divide i team
     const team1 = splitText[0].trim();
     const team2 = splitText[1]?.trim() || "";
@@ -190,186 +173,20 @@ bot.command("partita", async (ctx) => {
     const team1Players = team1.split(" ").filter(Boolean);
     const team2Players = team2.split(" ").filter(Boolean);
 
+    // Esegui la funzione undo passando i parametri
+    const result = await undo(dati, IDGruppo, team1Players, team2Players);
 
-
-    const validUserIds = gruppo.utenti.map((user) => user.userId);
-    const invalidUserIds = team1Players.concat(team2Players).filter((userId) => !validUserIds.includes(userId));
-    if (invalidUserIds.length > 0) {
-        await ctx.reply(`Gli userId ${invalidUserIds.join(", ")} non sono validi per questo gruppo.`);
-        return;
-    }
-
-    // Aggiorna i punti in base ai risultati
-   switch(team1Players.length) {
-    case 1:
-        // chiamata in mano e vince
-        team1Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points += 4;
-        });
-        team2Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points -= 1;
-        });
-        break;
-    case 2:
-        // chiamata esterna e vince
-        var k = 2;
-        team1Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points += k;
-            k--;
-        });
-        team2Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points -= 1;
-        });
-        break;
-    case 3:
-        // chiamo in mano e perdo
-        team2Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points -= 4;
-        });
-        team1Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points += 1;
-        });
-        break; // aggiungi il break qui
-    case 4:
-        // chiamo esterno e perdo
-        var k = 2;
-        team2Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points -= k;
-            k--;
-        });
-        team1Players.forEach((userId) => {
-            const user = gruppo.utenti.find((u) => u.userId === userId);
-            user.points += 1;
-        });
-        break;
-}
-
-
-    salvaDati(dati);
-    await ctx.reply(`Punteggi aggiornati!`);
+    // Rispondi con il risultato
+    await ctx.reply(result);
 });
 
-bot.command("undo", async (ctx) => {
-    const args = ctx.message.text.split(" ").slice(1);
-    const IDGruppo = ctx.chat.id;
-    const savePartita = ctx.message.text.replace("/undo ", "").trim();  // Assicurati che la stringa della partita sia corretta
-
-    // Verifica che l'utente abbia fornito una stringa di partita
-    if (!savePartita) {
-        await ctx.reply("Errore: devi specificare la partita da annullare. Esempio: /undo <descrizione partita>");
-        return;
-    }
-
-    const dati = caricaDati();
+// Eseguiamo un reset dei punteggi di tutti gli utenti
+// Funzione clear modificata
+async function clear(dati, IDGruppo) {
+    // Trova il gruppo associato all'IDGruppo
     const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
-    
     if (!gruppo) {
-        await ctx.reply(`Errore: il gruppo con ID ${IDGruppo} non esiste.`);
-        return;
-    }
-
-    // Verifica se la partita esiste
-    const partita = gruppo.partite.find((p) => p === savePartita);  // Confronta direttamente le stringhe
-
-    if (!partita) {
-        await ctx.reply(`Errore: la partita "${savePartita}" non è mai stata registrata.`);
-        return;
-    }
-
-    // Se la partita esiste, procediamo con l'annullamento
-    const splitText = savePartita.split("/");  // Divide i team
-    const team1 = splitText[0].trim();
-    const team2 = splitText[1]?.trim() || "";
-
-    const team1Players = team1.split(" ").filter(Boolean);
-    const team2Players = team2.split(" ").filter(Boolean);
-
-    // Ottieni gli ID degli utenti validi
-    const validUserIds = gruppo.utenti.map((user) => user.userId);
-    const invalidUserIds = team1Players.concat(team2Players).filter((userId) => !validUserIds.includes(userId));
-
-    if (invalidUserIds.length > 0) {
-        await ctx.reply(`Errore: gli userId ${invalidUserIds.join(", ")} non sono validi per questo gruppo.`);
-        return;
-    }
-
-    // Aggiorna i punti in base all'undo
-    switch (team1Players.length) {
-        case 1:
-            // chiamata in mano e vince
-            team1Players.forEach((userId) => {
-                const user = gruppo.utenti.find((u) => u.userId === userId);
-                if (user) user.points -= 4;  // Ripristina i punti precedenti
-            });
-            team2Players.forEach((userId) => {
-                const user = gruppo.utenti.find((u) => u.userId === userId);
-                if (user) user.points += 1;  // Ripristina i punti precedenti
-            });
-            break;
-        case 2:
-            // chiamata esterna e vince
-            let k = 2;
-            team1Players.forEach((userId) => {
-                const user = gruppo.utenti.find((u) => u.userId === userId);
-                if (user) user.points -= k;  // Ripristina i punti precedenti
-                k--;
-            });
-            team2Players.forEach((userId) => {
-                const user = gruppo.utenti.find((u) => u.userId === userId);
-                if (user) user.points += 1;  // Ripristina i punti precedenti
-            });
-            break;
-        case 3:
-            // chiamo in mano e perdo
-            team2Players.forEach((userId) => {
-                const user = gruppo.utenti.find((u) => u.userId === userId);
-                if (user) user.points += 4;  // Ripristina i punti precedenti
-            });
-            team1Players.forEach((userId) => {
-                const user = gruppo.utenti.find((u) => u.userId === userId);
-                if (user) user.points -= 1;  // Ripristina i punti precedenti
-            });
-            break;
-        case 4:
-            // chiamo esterno e perdo
-            let k2 = 2;
-            team2Players.forEach((userId) => {
-                const user = gruppo.utenti.find((u) => u.userId === userId);
-                if (user) user.points += k2;  // Ripristina i punti precedenti
-                k2--;
-            });
-            team1Players.forEach((userId) => {
-                const user = gruppo.utenti.find((u) => u.userId === userId);
-                if (user) user.points -= 1;  // Ripristina i punti precedenti
-            });
-            break;
-    }
-
-    // Rimuovi la partita dalla lista delle partite
-    gruppo.partite = gruppo.partite.filter((p) => p !== savePartita);
-
-    // Salva i dati dopo aver eseguito l'undo
-    salvaDati(dati);
-
-    // Rispondi all'utente
-    await ctx.reply(`L'operazione di undo è stata eseguita! La partita "${savePartita}" è stata annullata.`);
-});
-bot.command("clear", async (ctx) => {
-    const IDGruppo = ctx.chat.id;
-
-    const dati = caricaDati();
-    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
-    
-    if (!gruppo) {
-        await ctx.reply(`Errore: il gruppo con ID ${IDGruppo} non esiste.`);
-        return;
+        throw new Error(`Errore: il gruppo con ID ${IDGruppo} non esiste.`);
     }
 
     // Resetta i punti di tutti i giocatori nel gruppo a 0
@@ -380,12 +197,29 @@ bot.command("clear", async (ctx) => {
     // Salva i dati dopo aver azzerato i punti
     salvaDati(dati);
 
-    // Rispondi all'utente
-    await ctx.reply("Tutti i punti dei giocatori sono stati azzerati.");
-    await ctx.reply("/classifica");
+    // Restituisci un messaggio di conferma
+    return "Tutti i punti dei giocatori sono stati azzerati.";
+}
+
+// Comando `/clear`: Azzerare i punti di tutti i giocatori del gruppo
+bot.command("clear", async (ctx) => {
+    const IDGruppo = ctx.chat.id;
+
+    // Carica i dati
+    let dati = caricaDati();
+
+    try {
+        // Esegui la funzione clear passando i parametri
+        const result = await clear(dati, IDGruppo);
+
+        // Rispondi con il risultato
+        await ctx.reply(result);
+    } catch (error) {
+        await ctx.reply(error.message);  // Rispondi con l'errore, se presente
+    }
 });
 
-bot.command("override", async (ctx) => {
+async function setOverride (ctx){
     // Devo eseguire l'override dei punti del valore passato come parametro
     // - /override <userId> <points>
     const args = ctx.message.text.split(" ").slice(1);
@@ -430,10 +264,12 @@ bot.command("override", async (ctx) => {
 
     // Rispondi al comando
     await ctx.reply(`Override eseguito! L'utente con userId "${userId}" ha ora ${points} punti.`);
-});
+};
 
-// Comando `/classifica`: Mostra la classifica dei giocatori nel gruppo
-bot.command("classifica", async (ctx) => {
+bot.command("override", async (ctx) => {
+    setOverride(ctx);  
+});
+async function clasifica(ctx){
     let dati = caricaDati();
     let gruppo = dati.gruppi.find((g) => g.IDGruppo === ctx.chat.id);
 
@@ -450,11 +286,14 @@ bot.command("classifica", async (ctx) => {
 
         let risposta = "Classifica:\n";
         utenti.forEach((user, index) => {
-            risposta += `${index + 1} Posizione, Nome:${user.alias || user.userId} - ${user.points} punti\n`;
+            risposta += `${index + 1} Posizione, Nome:${user.alias || user.userId} - Punteggio -> ${user.points} punti\n`;
         });
         await ctx.reply(risposta);
     }
-   
+}
+// Comando `/classifica`: Mostra la classifica dei giocatori nel gruppo
+bot.command("classifica", async (ctx) => {
+    clasifica(ctx);
 });
 bot.on(message("text"), async (ctx) => {
     await ctx.reply(`You said: ${ctx.message.text}`)
@@ -470,37 +309,3 @@ bot.launch().then(() => {
 // Stop con SIGINT e SIGTERM
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
-
-
-function calcPunti(){
-    let x; 
-    if(team1Players.length < team2Players.length) x = 1;
-      else x = -1;
-      
-      switch(team1Players.length) {
-         case 1:
-         case 4:
-             team1Players.forEach((userId) => {
-                 const user = gruppo.utenti.find((u) => u.userId === userId);
-                 user.points += 4 * x;
-             });
-             team2Players.forEach((userId) => {
-                 const user = gruppo.utenti.find((u) => u.userId === userId);
-                 user.points -= 1 * x;
-             });
-             break;
-         case 2:
-         case 3:
-             var k = 2;
-             team1Players.forEach((userId) => {
-                 const user = gruppo.utenti.find((u) => u.userId === userId);
-                 user.points += k * x;
-                 k--;
-             });
-             team2Players.forEach((userId) => {
-                 const user = gruppo.utenti.find((u) => u.userId === userId);
-                 user.points -= 1 * x;
-             });
-             break;
-     }
-}

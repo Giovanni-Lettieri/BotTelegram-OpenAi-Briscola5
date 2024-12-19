@@ -1,19 +1,6 @@
-const { readFileSync, writeFileSync } = require("fs")
 const { DATA_PATH } = require("./configs")
+const fs = require("fs");
 
-const loadData = () => {
-    try {
-        const data = readFileSync(DATA_PATH)
-        return JSON.parse(data)
-    } catch (_) {
-        // Error loading data
-        return {}
-    }
-}
-
-const saveData = (data) => {
-    writeFileSync(DATA_PATH, JSON.stringify(data, null, 2))
-}
 
 /* 
     This function is a wrapper around the OpenAI Chat API 
@@ -29,12 +16,54 @@ const saveData = (data) => {
 
     The function returns a Promise that resolves with the assistant's response.
 */
+
+// Funzione per la creazione di un nuovo gruppo
+function aggiungiGruppo(IDGruppo) {
+    const dati = caricaDati();
+    const nuovoGruppo = {
+        IDGruppo: IDGruppo,
+        partite:[],
+        utenti: []
+    };
+    dati.gruppi.push(nuovoGruppo);
+    salvaDati(dati);
+    console.log(`Gruppo con ID ${IDGruppo} aggiunto.`);
+}
+
+// Funzione per il caricamento dei dati nel nostro file "database.json"
+function caricaDati(filename = "database.json") {
+    try {
+        const data = fs.readFileSync(filename, "utf8");
+        const parsedData = JSON.parse(data);
+
+        // Assicurati che esistano le chiavi 'gruppi' e 'users'
+        if (!parsedData.gruppi) {
+            parsedData.gruppi = [];
+        }
+        return parsedData;
+    } catch (err) {
+        console.error("Errore nel caricare il file:", err);
+        return { gruppi: [] };  // Restituisci un oggetto vuoto in caso di errore
+    }
+}
+
+// Salva i dati nel file JSON
+function salvaDati(dati, filename = "database.json") {
+    try {
+        fs.writeFileSync(filename, JSON.stringify(dati, null, 2), "utf8");
+    } catch (err) {
+        console.error("Errore nel salvare il file:", err);
+    }
+}
+
+
 const completionWithFunctions = async (options) => {
     const {
         openai,
         messages,
         model = "gpt-3.5-turbo",
-        prompt
+        prompt,
+        functions
     } = options
 
     const tools = functions.map(({ definition }) => ({
@@ -94,8 +123,246 @@ const completionWithFunctions = async (options) => {
 
 // Put here other utility functions that can be used in the whole project
 
+// Comando `/createUser`: Crea un utente nel gruppo
+
+async function setUsers(ctx) {
+    const IDGruppo = ctx.chat.id;
+    const dati = caricaDati();
+    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+
+    if (!gruppo) {
+        await ctx.reply(`Il gruppo con ID ${IDGruppo} non esiste.`);
+        return;
+    }
+
+    if (gruppo.utenti.length === 0) {
+        await ctx.reply("Non ci sono utenti registrati in questo gruppo.");
+    } else {
+        let risposta = "Utenti nel gruppo:\n";
+        gruppo.utenti.forEach((user) => {
+            risposta += `ID: ${user.userId}, Alias: ${user.alias}, Punti: ${user.points}\n`;
+        });
+        await ctx.reply(risposta);
+    }
+}
+
+
+// Funzione per restituire l'output  del comando /help
+function writeHelp(){
+    ctx.reply(`
+        Comandi disponibili:
+        - /start - Inizia una conversazione con il bot.
+        - /createUser <userId> - Crea un nuovo utente con l'ID specificato.
+        - /addAlias <userId> <alias> - Aggiungi un alias per un utente esistente.
+        - /users - Mostra tutti gli utenti registrati in questo gruppo.
+        - /partita <userId1> <userId2> / <userId3> <userId4> <userId5> - Registra una partita.
+        - /classifica - Mostra la classifica dei giocatori nel gruppo.
+        - /override <userId> <points> - Sovrascrive i punti di un utente.
+        - /undo <userId1> <userId2> / <userId3> <userId4> <userId5> - Annulla una partita.
+    `);
+}
+
+
+// Funzione per il comando "/createUser"
+/*
+async function writeHelp() {
+  return `
+    Comandi disponibili:
+    - /start - Inizia una conversazione con il bot.
+    - /createUser <userId> - Crea un nuovo utente con l'ID specificato.
+    - /addAlias <userId> <alias> - Aggiungi un alias per un utente esistente.
+    - /users - Mostra tutti gli utenti registrati in questo gruppo.
+    - /partita <userId1> <userId2> / <userId3> <userId4> <userId5> - Registra una partita.
+    - /classifica - Mostra la classifica dei giocatori nel gruppo.
+    - /override <userId> <points> - Sovrascrive i punti di un utente.
+    - /undo <userId1> <userId2> / <userId3> <userId4> <userId5> - Annulla una partita.
+    `;
+}*/
+
+// Funcione per il comando "/createUser", crea un nuovo utente nel nostro gruppo determinato dal gruppoId
+async function createUser(userId,dati,chatID){
+    let gruppo = dati.gruppi.find((g) => g.IDGruppo === chatID);
+    gruppo.utenti.push({ userId, alias: "", points: 0 });
+    return dati;
+}
+//Aggiunge l'alias NON LO SALVA 
+async function addAlias(user,alias){
+    user.alias = alias;
+    return user;    
+}
+async function undo(dati, IDGruppo, winTeams, FailTeams2) {
+    // Trova il gruppo associato all'IDGruppo
+    const gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    //Controllo esistenza del gruppo
+    if (!gruppo) {
+        throw new Error(`Errore: il gruppo con ID ${IDGruppo} non esiste.`);
+    }
+
+    // Recupera la descrizione della partita dai team
+    const savePartita = `${winTeams.join(" ")} / ${FailTeams2.join(" ")}`;
+
+    // Verifica se la partita esiste
+    const partita = gruppo.partite.find((p) => p === savePartita);
+    // Controllo se sono state trovate delle partite precedentemente
+    if (!partita) {
+        return `Errore: la partita "${savePartita}" non è mai stata registrata.`;
+    }
+
+    // Ottieni gli ID degli utenti validi
+    const validUserIds = gruppo.utenti.map((user) => user.userId);
+    const invalidUserIds = winTeams.concat(FailTeams2).filter((userId) => !validUserIds.includes(userId));
+    // Controllo degli userIds
+    if (invalidUserIds.length > 0) {
+        return `Errore: gli userId ${invalidUserIds.join(", ")} non sono validi per questo gruppo.`;
+    }
+
+    // Aggiorna i punti in base all'undo
+    switch (winTeams.length) {
+        case 1:
+            // chiamata in mano e vince
+            winTeams.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points -= 4;  // Ripristina i punti precedenti
+            });
+            FailTeams2.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points += 1;  // Ripristina i punti precedenti
+            });
+            break;
+        case 2:
+            // chiamata esterna e vince
+            let k = 2;
+            winTeams.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points -= k;  // Ripristina i punti precedenti
+                k--;
+            });
+            FailTeams2.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points += 1;  // Ripristina i punti precedenti
+            });
+            break;
+        case 3:
+            // chiamo in mano e perdo
+            FailTeams2.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points += 4;  // Ripristina i punti precedenti
+            });
+            winTeams.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points -= 1;  // Ripristina i punti precedenti
+            });
+            break;
+        case 4:
+            // chiamo esterno e perdo
+            let k2 = 2;
+            FailTeams2.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points += k2;  // Ripristina i punti precedenti
+                k2--;
+            });
+            winTeams.forEach((userId) => {
+                const user = gruppo.utenti.find((u) => u.userId === userId);
+                if (user) user.points -= 1;  // Ripristina i punti precedenti
+            });
+            break;
+    }
+
+    // Rimuovi la partita dalla lista delle partite
+    gruppo.partite = gruppo.partite.filter((p) => p !== savePartita);
+
+    // Salva i dati dopo aver eseguito l'undo
+    salvaDati(dati);
+
+    // Restituisci un messaggio di conferma
+    return `L'operazione di undo è stata eseguita! La partita "${savePartita}" è stata annullata.`;
+}
+
+// Aggiunge partita e lo salva
+async function partita(dati, IDGruppo, winTeams, FailTeams2) {
+    // Recupera il gruppo associato all'IDGruppo
+    let gruppo = dati.gruppi.find((g) => g.IDGruppo === IDGruppo);
+    if (!gruppo) {
+        throw new Error("Gruppo non trovato!");
+    }
+
+    // Aggiungi la partita al gruppo
+    const savePartita = `${winTeams.join(" ")} / ${FailTeams2.join(" ")}`;
+    gruppo.partite.push(savePartita);
+
+    // Lista di ID utente validi
+    const validUserIds = gruppo.utenti.map((user) => user.userId);
+
+    // Verifica che tutti gli ID utente dei team siano validi
+    const invalidUserIds = winTeams.concat(FailTeams2).filter((userId) => !validUserIds.includes(userId));
+    if (invalidUserIds.length > 0) {
+        return `Gli userId ${invalidUserIds.join(", ")} non sono validi per questo gruppo.`;
+    }
+
+    // Calcolo dei punteggi
+    if (winTeams.length === 1) {
+        // chiamata in mano e vince
+        winTeams.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points += 4;
+        });
+        FailTeams2.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points -= 1;
+        });
+    } else if (winTeams.length === 2) {
+        // chiamata esterna e vince
+        let k = 2;
+        winTeams.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points += k;
+            k--;
+        });
+        FailTeams2.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points -= 1;
+        });
+    } else if (winTeams.length === 3) {
+        // chiamo in mano e perdo
+        FailTeams2.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points -= 4;
+        });
+        winTeams.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points += 1;
+        });
+    } else if (winTeams.length === 4) {
+        // chiamo esterno e perdo
+        let k = 2;
+        FailTeams2.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points -= k;
+            k--;
+        });
+        winTeams.forEach((userId) => {
+            const user = gruppo.utenti.find((u) => u.userId === userId);
+            user.points += 1;
+        });
+    }
+
+    // Salva i dati
+    salvaDati(dati);
+
+    return "Punteggi aggiornati!";
+}
+// Selezioniamo le funzioni che vogliamo esportare da questo file
 module.exports = {
-    loadData,
-    saveData,
-    completionWithFunctions
+    completionWithFunctions,
+    setUsers,
+    aggiungiGruppo,
+    writeHelp,
+    caricaDati,
+    salvaDati,
+    writeHelp,
+    createUser,
+    addAlias,
+    partita,
+    undo,
+    
 }
